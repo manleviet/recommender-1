@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <vector>
+#include <algorithm>
 #include <unistd.h>
 #include <math.h>
 #include <string.h>
@@ -8,6 +10,8 @@ using namespace std;
 #define MOVIENUM 17770 
 #define USERNUM 480189
 #define RATIO  1.1//计算相似度，系数ratio
+#define HOODSIZE 30//最多保存30个邻居
+#define THRESHOLD 0.25//相似度阈值，不能低于0.25
 //从预处理后的文件rating.data读入的数据：
 
 struct Rating {
@@ -41,9 +45,19 @@ struct User {
         head = -1, cnt = 0, avgscore = 0, dat_score = 0;sigma = 0 ;
     }
 }users[USERNUM + 1];
+struct SimIdx{//用户相似度记录的索引
+    int userid;//用户id
+    int begin;//用户i的相似度记录UserSim[]的开始下标
+    int cnt;//记录个数
+    SimIdx(){userid=-1,begin=-1,cnt=-1;}
+}simidxs[USERNUM+1];
 
+struct UserSim{
+    int userid;//用户id
+    double sim;//相似度
+}sims[310000];//缓存用户相似度记录
 void getUserSim(int l,map<int,double> &sims);
-void testUserMovieLst(int l){
+void testUserMovieLst(int l){   
     printf("\nuser:%d movies:\n",l);
     int head=users[l].head;
     while(head>=0) printf("%d  ",Ratings[head].movieid),head=Ratings[head].next;
@@ -130,37 +144,72 @@ void initdata(){
         fout=fopen("datas/movies.data","wb");
         fwrite(movies,sizeof(Movie),MOVIENUM+1,fout);
         fclose(fout);
-    }
-
-    printf("computing the similarity of users\n");
-    //计算用户相似度
-    //取得相似度最高的150个邻居，保存他们的相似度。则数据规模为48w*0.015w*12=6亿字节，需要900MB的存储
-    //对于任意一部电影，大约会被用户的100个邻居中的8个看过
-//    FILE *simfile=fopen("datas/sim.data","wba");//记录用户之间相似度的文件
-//    FILE *idxfile=fopen("datas/simidx.data","wba");//记录用户相似度的文件索引
-    for(int i=1;i<=1;i++){
-        printf("user %d:\n",i);
-        map<int,double> res;
-        getUserSim(i,res);
-        int num=0;
-        for(map<int,double>::iterator it=res.begin();
-                it!=res.end()&&num++<150;it++){
-            printf("user %d sim %f\n",it->first,it->second);
-        }
-        res.clear();
-    }
-
-    testUserMovieLst(1);
-    testMovieUserLst(1);
+    }  
 }
 
-//获得计算两个人的相似度的公式的分母（sigma i * sigma j)
+//计算用户之间的相似度
+//并保存到sim.data和simidx.data
+typedef pair<int,double> PAIR;  
+int cmp(const PAIR& x, const PAIR& y)  {  return x.second > y.second;  }  
+void initSim(){
+    printf("computing the similarity of users\n");
+    //计算用户相似度
+    //取得相似度最高的30个以内的邻居，保存他们的相似度。
+    //数据规模为48w*0.003w*12=1.2亿字节，大约需要180MB的存储
+    //对于任意一部电影，大约会被用户的30个邻居中的5个看过
+    FILE *simFile=fopen("datas/sim.data","wba");//记录用户之间相似度的文件
+    FILE *simIdxFile=fopen("datas/simidx.data","wba");//记录用户相似度的文件索引
+    int curidx=0,baseidx=0;
+    for(int i=1;i<=1;i++){
+        //当存储超过300000个相似度纪录时 flush memory
+        if(curidx>300000) {
+            fwrite(sims,sizeof(UserSim),curidx,simFile);
+            baseidx+=curidx;
+            curidx=0;
+        }
+
+        printf("user %d:\n",i);
+        map<int,double> res; vector<PAIR> vec;  
+        getUserSim(i,res);
+        for (map<int,double>::iterator curr = res.begin(); curr != res.end(); ++curr)  
+            vec.push_back(make_pair(curr->first, curr->second));  
+        sort(vec.begin(),vec.end(),cmp);
+
+        int num=0;
+        simidxs[i].begin=curidx+baseidx;simidxs[i].userid=i;
+        for(vector<PAIR>::iterator it=vec.begin();it!=vec.end();it++){
+            if(it->second>THRESHOLD){//如果相似度大于阈值
+                sims[curidx].userid=it->first;
+                sims[curidx].sim=it->second;
+                num++;curidx++;
+                if(num>=HOODSIZE) break;//邻居记录个数不能超过限额（30）
+            }
+            else break;
+        }
+        simidxs[i].cnt=num;
+    }
+    fwrite(sims,sizeof(UserSim),curidx,simFile);
+    fwrite(simidxs,sizeof(SimIdx),USERNUM+1,simIdxFile);
+    fclose(simFile);fclose(simIdxFile);
+    //    testUserMovieLst(1);
+    //    testMovieUserLst(1);
+}   
+
+//获得计算两个人的相似度的
+//皮尔森系数公式的分母（sigma i * sigma j)
 double getSimBase(int i,int j){
     //如果sigma i或j=0，则返回0
     return users[i].sigma*users[j].sigma;
 }
 
-//计算用户i和其他人的相似度
+//协同过滤
+//计算用户l对movie的预测评分
+double predict(int l,int m,FILE *fin){
+    int idx=simidxs[l].begin;
+    int cnt=simidxs[l].cnt;
+    return 0;
+}
+//计算用户i和其他人的相似度(皮尔森相关系数)
 void getUserSim(int l,map<int,double>& sims){
 
     int i=users[l].head;
@@ -169,8 +218,8 @@ void getUserSim(int l,map<int,double>& sims){
         Rating rate=Ratings[i];int score=rate.score;int movieid=rate.movieid;
         double x=(double)score*RATIO-users[l].avgscore;
         int j=movies[movieid].head;
-//        printf("\nmovie:%d\n",movieid);
-//        printf(" neighbour:%d ",Ratings[j].userid);
+        //        printf("\nmovie:%d\n",movieid);
+        //        printf(" neighbour:%d ",Ratings[j].userid);
         while(Ratings[j].movieid==movieid){//对该电影，找到所有评论过的人，获得其分子
             int otherid=Ratings[j].userid;//其他对该电影评分的人 
             int otherscore=Ratings[j].score;//其评分
@@ -190,6 +239,7 @@ void inituserSim(){
 int main(){
     //    initUserMovieScoreLst(true);
     initdata();
+    initSim();  
     return 1;
 }
 
