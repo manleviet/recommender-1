@@ -71,8 +71,10 @@ void initdata(){
         users[i].avgscore=users[i].cnt==0?0:(double)users[i].score/users[i].cnt;
         int head=users[i].head;
         while(head>=0){
-           // printf("%d ",head),head=Ratings[head].next;
+           // printf("%d ",head)D,DD
+           // printf("score:%d avl:%f\n",Ratings[head].score,users[i].avgscore);
             users[i].sigma+=pow(Ratings[head].score-users[i].avgscore,2);
+            head=Ratings[head].next;
         }
         users[i].sigma=sqrt(users[i].sigma);
         if(i<1000) printf("avl:%f sigma:%f\n",users[i].avgscore,users[i].sigma);
@@ -102,8 +104,9 @@ map<int,float> getUserSim(int l){
         }
     }
 }
-void inituserSim(int i,int j){
-    
+void inituserSim(){
+    for(int i=0;i<USERNUM;i++){
+        
 }
 
 int main(){
