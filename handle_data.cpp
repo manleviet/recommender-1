@@ -1,4 +1,5 @@
 #include <fstream>
+#include <algorithm>
 #include <iostream>
 #include <string.h>
 #include <stdio.h>
@@ -13,15 +14,16 @@ struct Rating {
     void init(int _movieid, int _userid, int _rating) {
         movieid = _movieid, userid = _userid, rating = _rating;
     }
+    //rating 按照用户id和评分排序
     bool operator <(const Rating &a) const {
-        return movieid < a.movieid || movieid == a.movieid && userid < a.userid;
+        return userid < a.userid || userid == a.userid && rating > a.rating;
     }
 }ratings[cnt_rating];
 
 //创建用户连续编号
 void initUserIdx(){
     //读取useridx（useridx连续编号）到userIdx map数组
-    ifstream ifile("datas/useridx");
+    ifstream ifile("datas/useridx.data");
     UserIdx.clear();
     if(ifile.good()){
         printf("reading datas/useridx\n");
@@ -50,17 +52,22 @@ void initUserIdx(){
 
 //private  
 ////读取rating.data
-bool RatingDataRead=false;
 void readRatingData(){
-    if(RatingDataRead) return;
-    FILE *RatingDataFile=fopen("datas/rating.data","r");
-    if(RatingDataFile==NULL){
-        printf("open rating.data error!\n");
-        return;
+    FILE *ratingDataFile=fopen("datas/sortedrating.data","r");
+    if(ratingDataFile==NULL){
+        ratingDataFile=fopen("datas/rating.data","r");
+        FILE* sortedRatingDataFile=fopen("datas/rating.data","wb");
+        fread(ratings, sizeof(Rating), cnt_rating, ratingDataFile);
+        fclose(ratingDataFile);
+
+        //对ratingdata按照（userid，rating）进行排序
+        sort(ratings,ratings+cnt_rating);
+        fwrite(ratings,sizeof(Rating),cnt_rating,sortedRatingDataFile);
+        fclose(sortedRatingDataFile);
+    }else {
+        fread(ratings,sizeof(Rating),cnt_rating,ratingDataFile);
+        fclose(ratingDataFile);
     }
-    fread(ratings, sizeof(Rating), cnt_rating, RatingDataFile);
-    fclose(RatingDataFile);
-    RatingDataRead=true;
 }
 
 float UserAvgScore[USERNUM];
@@ -127,8 +134,9 @@ void inituserSim(int i,int j){
 }
 
 int main(){
-    initUserIdx();
-    initUserMovieScoreLst(true);
+//  initUserIdx();
+//    initUserMovieScoreLst(true);
+    readRatingData();
     return 1;
 }
 
