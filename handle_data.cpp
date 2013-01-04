@@ -1,5 +1,6 @@
 #include <fstream>
 #include <algorithm>
+#include <math.h>
 #include <iostream>
 #include <string.h>
 #include <stdio.h>
@@ -7,19 +8,21 @@
 #include "handle_data.h"
 using namespace std;
 #define cnt_rating 100480507
-map<int ,int> UserIdx;
 void readRatingData();
 struct Rating {
-    int movieid, userid, rating, next;
-    void init(int _movieid, int _userid, int _rating) {
-        movieid = _movieid, userid = _userid, rating = _rating;
+    int movieid, userid, score, next;
+    void init(int _movieid, int _userid, int _score) {
+        movieid = _movieid, userid = _userid, score = _score;
     }
-    //rating 按照用户id和评分排序
+    //score 按照用户id和评分排序
     bool operator <(const Rating &a) const {
-        return userid < a.userid || userid == a.userid && rating > a.rating;
+        return userid < a.userid || userid == a.userid && score > a.score;
     }
-}ratings[cnt_rating];
+}Ratings[cnt_rating];
+int UserRatingsHead[USERNUM];//记录user在Ratings数组的开始下标
+int MovieRatingsHead[MOVIENUM];//记录user在Ratings数组的开始下标
 
+map<int ,int> UserIdx;
 //创建用户连续编号
 void initUserIdx(){
     //读取useridx（useridx连续编号）到userIdx map数组
@@ -38,7 +41,7 @@ void initUserIdx(){
     int curidx=0;
     printf("create continus user idx\n");
     for(int i = cnt_rating - 1; i >= 0; --i) {
-        Rating rate=ratings[i];
+        Rating rate=Ratings[i];
         if(UserIdx.find(rate.userid)==UserIdx.end()) {
             printf("%d:%d\n",rate.userid,curidx);
             UserIdx[rate.userid]=curidx++;
@@ -50,63 +53,96 @@ void initUserIdx(){
     ofile.flush();
 }
 
-//private  
-////读取rating.data
+////读取rating.data，并按照用户id和评分排序
+//排序结果保存到sortedrating.data
 void readRatingData(){
-    FILE *ratingDataFile=fopen("datas/sortedrating.data","r");
-    if(ratingDataFile==NULL){
-        ratingDataFile=fopen("datas/rating.data","r");
-        FILE* sortedRatingDataFile=fopen("datas/rating.data","wb");
-        fread(ratings, sizeof(Rating), cnt_rating, ratingDataFile);
+    FILE *sortedRatingDataFile=fopen("datas/sortedrating.data","r");
+
+    if(sortedRatingDataFile==NULL){
+        FILE *ratingDataFile=fopen("datas/rating.data","r");
+        sortedRatingDataFile=fopen("datas/sortedrating.data","wb");
+        fread(Ratings, sizeof(Rating), cnt_rating, ratingDataFile);
         fclose(ratingDataFile);
 
         //对ratingdata按照（userid，rating）进行排序
-        sort(ratings,ratings+cnt_rating);
-        fwrite(ratings,sizeof(Rating),cnt_rating,sortedRatingDataFile);
+        sort(Ratings,Ratings+cnt_rating);
+        for(int i=0;i<100000;i++)
+            printf("%d:%d:%d\n",Ratings[i].userid,Ratings[i].score,Ratings[i].movieid);
+
+        //将排序结果输出到文件
+        fwrite(Ratings,sizeof(Rating),cnt_rating,sortedRatingDataFile);
         fclose(sortedRatingDataFile);
     }else {
-        fread(ratings,sizeof(Rating),cnt_rating,ratingDataFile);
-        fclose(ratingDataFile);
+
+        //读取排序结果
+        fread(Ratings,sizeof(Rating),cnt_rating,sortedRatingDataFile);
+        fclose(sortedRatingDataFile);
     }
 }
 
+float UserSigma[USERNUM];
 float UserAvgScore[USERNUM];
+//获取用户的平均分和sigma
 void initUserAvgScore(bool create){
     FILE *userAvgScoreFile=fopen("datas/useravgscore.data","r");
+    FILE *userSigmaFile=fopen("datas/usersigma.data","r");
     if(create)  fclose(userAvgScoreFile);
     if(userAvgScoreFile==NULL||create){
         //用户平均分
         for(int i=0;i<USERNUM;i++){
-            int score=0;int num=0;
-            for(list<movie_score>::iterator it= UserMovieScoreLst[i].begin();
-                    it!= UserMovieScoreLst[i].end();it++)
-            score+=it->score,num++;
-            UserAvgScore[i]=score==0?0:(float)score/num;
+            float score=0;int num=0;float sigma=0;
+            //            for(list<movie_score>::iterator it= UserMovieScoreLst[i].begin();
+            //                    it!= UserMovieScoreLst[i].end();it++)
+            int head=UserRatingsHead[i];
+            //用户评分列表非空
+            if(head>=0){
+                int userid=Ratings[head].userid;
+                for(int j=head;;j++){
+                    if(Ratings[j].userid!=userid) break;
+                    score+=Ratings[j].score,num++;
+                }
+
+                //计算平均分
+                UserAvgScore[i]=score==0?0:(float)score/num;
+                for(int j=head;;j++){
+                    //计算斯格玛：（用户的每个电影评分-平均评分）的平方和，再开根号。
+                    //斯格玛为用户的电影评分向量的模
+                    if(Ratings[j].userid!=userid) break;
+                    sigma+=pow(Ratings[j].score-UserAvgScore[i],2);
+                }
+                UserSigma[i]=sqrt(sigma);//开根号       
+            }
+
+            else {
+                printf("useridx:%d  no movie rated\n",i);
+                UserAvgScore[i]=0,UserSigma[i]=0;
+            }
+
         }
         //写回
         FILE *userAvgScoreFile=fopen("datas/useravgscore.data","wb");
         fwrite(UserAvgScore,sizeof(float),USERNUM,userAvgScoreFile);
-       // flush(userAvgScoreFile);
+        // flush(userAvgScoreFile);
         fclose(userAvgScoreFile);
         return;
     }
     fread(UserAvgScore,sizeof(float),USERNUM,userAvgScoreFile);
 }
 
-//获取用户评分的电影列表
-void initUserMovieScoreLst(bool create){
+//获取用户的评分列表(ratinglist)
+void initUserRatingLst(bool create){
     FILE *userMovieScoreLstFile=fopen("datas/usermoviescorelst.data","r");
     if(create)  fclose(userMovieScoreLstFile);
     if(userMovieScoreLstFile==NULL||create){
         //创建用户评分电影文件
-       
+
         readRatingData();
         //从rating.data读到MovieuserList
         for(int i = cnt_rating - 1; i >= 0; --i) {
-            Rating rate=ratings[i];
-            int userid=rate.userid;int movieid=rate.movieid;int rank=rate.rating;
-            printf("userid:%d movieid:%d rating:%d\n",userid,movieid,rank);
-            UserMovieScoreLst[UserIdx[userid]].push_back(movie_score(movieid,rank));
+            Rating rate=Ratings[i];
+            int userid=rate.userid;int movieid=rate.movieid;int score=rate.score;
+            printf("userid:%d movieid:%d rating:%d\n",userid,movieid,score);
+            UserMovieScoreLst[UserIdx[userid]].push_back(movie_score(movieid,score));
         }
         int UserMovieScoreLstIdx[USERNUM];
         memset((void*)UserMovieScoreLstIdx,0,USERNUM*sizeof(int));
@@ -115,10 +151,10 @@ void initUserMovieScoreLst(bool create){
         int p=0;
         //以 userid：movieid,score,形式存储   
         for(int i=0;i<USERNUM;i++){
-            ofile<<i;p+=4;
+            ofile<<i<<0;p+=2;
             for(list<movie_score>::iterator it= UserMovieScoreLst[i].begin();
                     it!= UserMovieScoreLst[i].end();it++)
-                ofile<<it->movieid<<it->score,p+=8;
+                ofile<<it->movieid<<it->score,p+=2;
             UserMovieScoreLstIdx[i]=p;
         }
         ofile.flush();
@@ -134,8 +170,8 @@ void inituserSim(int i,int j){
 }
 
 int main(){
-//  initUserIdx();
-//    initUserMovieScoreLst(true);
+    //  initUserIdx();
+    //    initUserMovieScoreLst(true);
     readRatingData();
     return 1;
 }

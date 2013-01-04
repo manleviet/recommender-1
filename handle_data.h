@@ -26,20 +26,20 @@ struct similarity{
     float sim;
 };
 #define USERNUM 480190
-#define MOVIENUM
-#define RATINGNUM
+#define MOVIENUM 17780
+//#define RATINGNUM
 //rating.data -> MovieUserLst
-list<struct user_score> MovieUserLst[17780];//看过电影i的用户id list
+list<struct user_score> MovieUserLst[MOVIENUM];//看过电影i的用户id list
 
 //item based
 #ifdef MOVIE_BASED
 //电影斯格玛
-float movie_sigma[17780];//看过这个电影的所有人对该电影评分减去他给出的平均分的平方和
+float movie_sigma[MOVIENUM];//看过这个电影的所有人对该电影评分减去他给出的平均分的平方和
 //电影之间的相似度
-list<struct similarity> MovieSimLst[17780];//记录电影和其他电影的相似度
+list<struct similarity> MovieSimLst[MOVIENUM];//记录电影和其他电影的相似度
         //movie i,j之间相似度=movie i被user[u]评分*movie j被user
 //电影平均分
-float movie_avg_score[17780];
+float movie_avg_score[MOVIENUM];
 //predict
 #endif
 
