@@ -72,6 +72,7 @@ void readRatingData(){
         //将排序结果输出到文件
         fwrite(Ratings,sizeof(Rating),cnt_rating,sortedRatingDataFile);
         fclose(sortedRatingDataFile);
+        printf("sorted rating.data \n");
     }else {
 
         //读取排序结果
