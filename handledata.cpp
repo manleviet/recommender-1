@@ -291,7 +291,6 @@ void initSim(){
     //协同过滤
     //计算用户l对movie的预测评分
     float predict(int l,int m){
-        initSim();
         int i=l*10;int j;
         float score=movies[m].avgscore;//电影获得的平均分
         while((j=sims[i].userid)>0)
@@ -302,13 +301,33 @@ void initSim(){
         }
         return score;
     }
-
+    
+    void getAnswer(){
+        FILE *queryFile=fopen("datas/fmt_query.txt","r");
+        if(queryFile==NULL) {
+            printf("please run ./data2bin to generate fmt_query.txt\n");
+            return ;
+        }
+        char line[100]; char date[30]; int userid;int movieid;
+        while(fscanf(queryFile, "%s", line) != EOF) {
+            if (line[strlen(line) - 1] == ':') {
+                printf("%s\n",line);
+                movieid = atoi(line);
+            } else {
+                sscanf(line, "%d,%s", &userid, date);
+                printf("%.3lf\n", predict(userid,movieid));
+            }
+        }
+        fclose(queryFile);
+    }
     int main(){
         //    initUserMovieScoreLst(true);
         initdata();
+        initSim();
         //        testUserMovieLst(1);
         // testMovieUserLst(1);
-        printf("user:%d movie:%d finalscore:%f\n",1,1,predict(1,1));
+       // printf("user:%d movie:%d finalscore:%f\n",1,1,predict(1,1));
+        getAnswer();
         return 1;
     }
 
