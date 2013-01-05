@@ -405,9 +405,11 @@ float predict(int userid,int movieid){
     //                if(sims[i++].userid<=0) break;
     //            }
     //        }
-    int cnt=0;float sim=0;float score=movies[movieid].avgscore;
+    int cnt=0;float sim=0;
+    float base_score=(movies[movieid].avgscore+users[userid].avgscore)/2;
+    float ext_score=0;
     int head=movies[movieid].head;
-    int tail=movies[movieid+1].head>head+200?head+200:movies[movieid+1].head;
+    int tail=movies[movieid+1].head>head+400?head+400:movies[movieid+1].head;
     for(int j=head;j<tail;j++){
         int that_id=Ratings[j].userid;
         sim=getUsersSim(that_id,userid);
@@ -415,14 +417,14 @@ float predict(int userid,int movieid){
             cnt++;
             //从that_id 对应用户寻求建议
             float that_score=(Ratings[j].score-users[that_id].avgscore);
-            score+=sim*that_score;
+            ext_score+=sim*that_score;
         }
         if(cnt>10) break;//只要十个人的建议即可
     }
-    if(cnt==0) 
+    if(cnt==0)
         printf("no useful neighbour found from %d users\n",
                 movies[movieid+1].head-movies[movieid].head);
-    return score;
+    return cnt==0?base_score:base_score+(ext_score/cnt);
 }
 
 void getAnswer(){
