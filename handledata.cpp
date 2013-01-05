@@ -10,9 +10,9 @@ using namespace std;
 #define MOVIENUM 17770 
 #define USERNUM 480189
 #define RATIO  1.1//计算相似度，系数ratio
-#define HOODSIZE 10//最多保存30个邻居
+#define HOODSIZE 30//最多保存30个邻居
 #define THRESHOLD 0.3//相似度阈值，不能低于0.3
-#define SIMNUM 4802000
+#define SIMNUM HOODSIZE*(USERNUM+1)
 //从预处理后的文件rating.data读入的数据：
 
 //注意：movie和user从1开始编号
@@ -125,8 +125,6 @@ void initdata(){
             int head=users[i].head;
             if(head<0) printf("userid:%d head error:%d\n",i, head);
             while(head>=0){
-                //if(i<10)printf("%d ",head);
-                // if(i<10) printf("user id:%d score:%d avg:%f\n",i,Ratings[head].score,users[i].avgscore);
                 // 为了避免sigma计算得到0，所以乘以RATIO 
                 users[i].sigma+=pow(RATIO*Ratings[head].score-users[i].avgscore,2);
                 head=Ratings[head].next;
@@ -141,9 +139,7 @@ void initdata(){
             if(i%1000==0)printf("\nmovie:%d\n",i);
             movies[i].avgscore=movies[i].cnt==0?0:(float)movies[i].avgscore/movies[i].cnt;
             int head=movies[i].head;
-            //if(i<10)printf("%d ",head);
             while(Ratings[head].movieid==i){
-                //   if(i<10) printf("movie id:%d score:%d avg:%f\n",i,Ratings[head].score,movies[i].avgscore);
                 // 为了避免sigma计算得到0，所以乘以RATIO 
                 movies[i].sigma+=pow(RATIO*Ratings[head].score-movies[i].avgscore,2);
                 head++;
@@ -221,14 +217,14 @@ void initSim(){
         for (map<int,float>::iterator curr = res.begin(); curr != res.end(); ++curr)  
             vec.push(make_pair(curr->first, curr->second));  
         int num=0;
-        curidx=i*10;
+        curidx=i*HOODSIZE;
         while(!vec.empty()){
             //if(it->second>THRESHOLD){//如果相似度大于阈值
             PAIR it=vec.top();vec.pop();
             sims[curidx].userid=it.first;
             sims[curidx++].sim=it.second;
             num++;
-            if(num>=HOODSIZE) break;//邻居记录个数不能超过限额（10）
+            if(num>=HOODSIZE) break;//邻居记录个数不能超过限额度
         }
         if(num<HOODSIZE)  sims[curidx++].init();//尾端标记
 
@@ -236,7 +232,7 @@ void initSim(){
         if(i%1000==0){ //48w/0.1w=480
             printf("user:%dK num:%d\n",i/1000,num);
             for(int j=0;j<num;j++) 
-                printf("neighborid:%d sim:%f\n",sims[i*10+j].userid,sims[i*10+j].sim);
+                printf("neighborid:%d sim:%f\n",sims[i*HOODSIZE+j].userid,sims[i*HOODSIZE+j].sim);
         }
     }
     printf("begin write usersim\n");
@@ -262,7 +258,7 @@ void initSim(){
             float x=(float)score*RATIO-users[l].avgscore;
             int head=movies[movieid].head;
             int tail=movies[movieid+1].head;
-            int num=(int)(pow(movies[movieid].cnt,1.0/3));//该公式用来限制从电影中添加邻居的个数
+            int num=(int)(2*pow(movies[movieid].cnt,1.0/3));//该公式用来限制从电影中添加邻居的个数
 
             for(int j=head;j<=head+num&&j<tail;j++){
                 int otherid=Ratings[j].userid;//其他对该电影评分的人 
@@ -291,13 +287,25 @@ void initSim(){
     //协同过滤
     //计算用户l对movie的预测评分
     float predict(int l,int m){
-        int i=l*10;int j;
+        int i=l*HOODSIZE;int j;
         float score=movies[m].avgscore;//电影获得的平均分
+        int cnt=0;
         while((j=sims[i].userid)>0)
-        {   
-            score+=sims[i].sim*getAdvice(j,m);//遍历邻居，获得建议(邻居的评分-邻居的平均评分)
+        {
+            float advice=getAdvice(j,m);
+            if(advice!=0) cnt++;
+            score+=sims[i].sim*advice;//遍历邻居，获得建议(邻居的评分-邻居的平均评分)
             i++;
-            if(i==l*10+10) break;
+            if(i>=(l+1)*HOODSIZE) break;
+        }
+        if(cnt==0)
+        {
+            printf("\nmovie id:%d found none user\n",m);
+            i=l*HOODSIZE;
+            while(i<(l+1)*HOODSIZE){
+                printf(" %d ",sims[i].userid);
+                if(sims[i++].userid<=0) break;
+            }
         }
         return score;
     }
@@ -308,23 +316,27 @@ void initSim(){
             printf("please run ./data2bin to generate fmt_query.txt\n");
             return ;
         }
-        char line[100]; char date[30]; int userid;int movieid;
+        FILE *answerFile=fopen("predict.txt","w");
+        char line[100]; char date[30]; int userid;int movieid;int qnum=0;
         while(fscanf(queryFile, "%s", line) != EOF) {
             if (line[strlen(line) - 1] == ':') {
-                printf("%s\n",line);
+                fprintf(answerFile,"%s\n",line);
                 movieid = atoi(line);
             } else {
                 sscanf(line, "%d,%s", &userid, date);
-                printf("%.3lf\n", predict(userid,movieid));
+                fprintf(answerFile,"%.3lf\n", predict(userid,movieid));
+                qnum++;
+                if(qnum>10) break;
             }
         }
         fclose(queryFile);
+        fclose(answerFile);
     }
     int main(){
         //    initUserMovieScoreLst(true);
         initdata();
         initSim();
-        //        testUserMovieLst(1);
+       // testUserMovieLst(1);
         // testMovieUserLst(1);
        // printf("user:%d movie:%d finalscore:%f\n",1,1,predict(1,1));
         getAnswer();
