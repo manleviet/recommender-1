@@ -22,7 +22,7 @@ struct Rating {
         movieid = _movieid, userid = _userid, rating = _rating;
     }
     bool operator <(const Rating &a) const {
-        return movieid < a.movieid || movieid == a.movieid && userid < a.userid;
+        return movieid < a.movieid || movieid == a.movieid && rating < a.rating;
     }
 }Ratings[100480507];
 
@@ -134,10 +134,10 @@ bool output(char *queryfile) {
 
 int main(int argc,char *argv[])
 {
-    if (argc != 3) {
-        puts("Usage: datatobin input.dir query.file");
-        return 1;
-    }
+//    if (argc != 3) {
+//        puts("Usage: datatobin input.dir query.file");
+//        return 1;
+//    }
     input(argv[1]);
     output(argv[2]);
     return 0;
