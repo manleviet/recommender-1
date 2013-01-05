@@ -25,9 +25,10 @@ struct Rating {
         return movieid < a.movieid || movieid == a.movieid && rating < a.rating;
     }
 }Ratings[100480507];
-
+int user_mapback[USERNUM];//新增:从连续的用户编号获得原编号
 map<int, int> map_userid;
-int cnt_rating = 0, arr_user_head[480190];
+int cnt_rating = 0;
+//int arr_user_head[480190];
 bool input(char dirname[]) {
     DIR *dp;
     FILE *fin;
@@ -62,6 +63,7 @@ bool input(char dirname[]) {
     int i = 0;
     for(it = set_userid.begin(); it != set_userid.end(); ++it) {
         map_userid[*it] = ++i;//从1开始对用户重新编号
+        user_mapback[i]=*it;
         printf("oldid:%d newid:%d\n",*it,i);
     }
 
@@ -80,12 +82,12 @@ bool output(char *queryfile) {
     puts("begin output rating by movie");
     //按照电影编号对Ratings排序
     sort(Ratings, Ratings + cnt_rating);
-    //同一个用户的记录之间用next连接起来
-    memset(arr_user_head, -1, sizeof(arr_user_head));
-    for(int i = cnt_rating - 1; i >= 0; --i) {
-        Ratings[i].next = arr_user_head[Ratings[i].userid];
-        arr_user_head[Ratings[i].userid] = i;
-    }
+    //    //同一个用户的记录之间用next连接起来
+    //    memset(arr_user_head, -1, sizeof(arr_user_head));
+    //    for(int i = cnt_rating - 1; i >= 0; --i) {
+    //        Ratings[i].next = arr_user_head[Ratings[i].userid];
+    //        arr_user_head[Ratings[i].userid] = i;
+    //    }
     if((fout = fopen("datas/rating.data", "wb")) == NULL) {
         puts("ERROR: can't open file rating.data");
         return false;
@@ -93,11 +95,18 @@ bool output(char *queryfile) {
     fwrite(Ratings, sizeof(Rating), cnt_rating, fout);
     fclose(fout);
 
-    if((fout = fopen("datas/user_ratings_head.data", "wb")) == NULL) {
-        puts("ERROR: can't open file rating.data");
+    //    if((fout = fopen("datas/user_ratings_head.data", "wb")) == NULL) {
+    //        puts("ERROR: can't open file rating.data");
+    //        return false;
+    //    }
+    //    fwrite(arr_user_head, sizeof(int), USERNUM, fout);
+    //    fclose(fout);
+
+    if((fout=fopen("datas/user_mapback.data","wb"))==NULL){
+        printf("ERROR:cannot open file user_mapback.data for writing");
         return false;
     }
-    fwrite(arr_user_head, sizeof(int), USERNUM, fout);
+    fwrite(user_mapback,sizeof(int),USERNUM,fout);
     fclose(fout);
 
     //将输入query文件格式化输出（修改userid为连续编号以后的userid）
@@ -134,11 +143,11 @@ bool output(char *queryfile) {
 
 int main(int argc,char *argv[])
 {
-//    if (argc != 3) {
-//        puts("Usage: datatobin input.dir query.file");
-//        return 1;
-//    }
-    input(argv[1]);
+    if (argc != 3) {
+        puts("Usage: datatobin input.dir query.file");
+        return 1;
+    }
+    input(argv[1]);       
     output(argv[2]);
     return 0;
 }
