@@ -1,5 +1,5 @@
 all:handledata data2bin handlequery
-	echo "all made"
+	@echo "all made"
 handledata:handledata.o -lm
 	g++ handledata.cpp  -O3 -o handledata
 data2bin:data2bin.o 
